@@ -20,9 +20,9 @@ data Property = Property        { details :: PropertyDetails
                                 , price :: Maybe String
                                 } deriving (Show)
 
-parsePage :: String -> String
+parsePage :: String -> Maybe [Property]
 parsePage content =
-    show maybeProperties
+    maybeProperties
     where
         tagTree = parseTree content
         maybeBodyTree = find hasListings tagTree

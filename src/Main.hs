@@ -22,7 +22,7 @@ import ResultsParsing
 data PageResult = PageResult    { page :: String
                                 , content :: String
                                 , propertyLinks :: [String]
-                                , nextPage :: (Maybe String)
+                                , nextPage :: Maybe String
                                 } deriving (Show)
 
 baseUrl :: String
@@ -104,19 +104,30 @@ fetchResults = do
     _ <- mapM (\pageResult -> writePageResult resultsFolder pageResult) pageResults
     return ()
 
-listFiles :: String -> IO ()
+listFiles :: String -> IO [FilePath]
 listFiles t = do
     homeDirectory <- getHomeDirectory
     resultsFolder <- return (homeDirectory ++ "/reaResults/" ++ t)
     files <- listDirectory resultsFolder
-    _ <- mapM (\file -> print file) files
-    return ()
+    absolutePaths <- return $ fmap (\file -> resultsFolder ++ "/" ++ file) files
+    return absolutePaths
 
+fileToProperties :: FilePath -> IO (Maybe [Property])
+fileToProperties path = do
+    handle <- openFile path ReadMode
+    contents <- hGetContents handle
+    parsedProperties <- return $ parsePage contents
+    _ <- print $ length parsedProperties
+    hClose handle
+    return parsedProperties
 
 main :: IO ()
 main = do
-    handle <- openFile "/Users/leonti.bielski/reaResults/2016-11-29/list-1" ReadMode
-    contents <- hGetContents handle
-    print $ parsePage contents
-    hClose handle
+    allFiles <- listFiles "2016-11-29"
+    allProperties <- mapM fileToProperties allFiles
+    --handle <- openFile "/Users/leonti.bielski/reaResults/2016-11-29/list-1" ReadMode
+    --contents <- hGetContents handle
+    --print $ parsePage contents
+    --hClose handle
+    print allProperties
 --    print "Call fetchResults to write into files"
