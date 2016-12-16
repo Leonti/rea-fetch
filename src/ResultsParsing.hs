@@ -22,25 +22,12 @@ data Property = Property        { details :: PropertyDetails
 
 parsePage :: String -> String
 parsePage content =
---    show $ (propertyFeaturesList !! 1)
---    show $ (tagTree !! 9)
-    --show $ fmap (\trees -> fmap (\features -> length features) trees) propertyFeaturesTrees
---      show $ fmap (\addresses -> addresses) maybeAddresses
-      --show  maybeDetails
-      show maybeProperties
---    show maybeBodyTree
---    show ""
+    show maybeProperties
     where
-        tags = parseTags content
         tagTree = parseTree content
         maybeBodyTree = find hasListings tagTree
         maybeListingTrees = fmap listings maybeBodyTree
-        maybeAddresses = fmap (fmap addressFromListingTree) maybeListingTrees
-        maybeDetails = fmap (fmap detailsFromListingTree) maybeListingTrees
-        maybeProperties = fmap (fmap parseListing) maybeListingTrees
-        propertyFeaturesTrees = fmap (fmap propertyFeaturesTree) maybeListingTrees
-        listingSections = tail $ splitWhen listingInfo tags
-        propertyFeaturesList = fmap listingInfoToPropertyFeatures listingSections
+        maybeProperties = fmap (concatMap parseListing) maybeListingTrees
 
 
 parseListing :: TagTreePos String -> [Property]
@@ -62,7 +49,7 @@ addressFromListingTree listingTree =
     head streetAddresses
     where
         addressTrees :: [TagTreePos String]
-        addressTrees = select addressSelector (content listingTree)
+        addressTrees = select (sel "a[rel=listingName]") (content listingTree)
 
         streetAddresses :: [String]
         streetAddresses = fmap streetFromAddressTree addressTrees
@@ -72,7 +59,7 @@ detailsFromListingTree listingTree =
     extractedDetails
     where
         projectChildTrees :: [TagTreePos String]
-        projectChildTrees = select projectChildSelector (content listingTree)
+        projectChildTrees = select (sel "div.project-child-listings") (content listingTree)
 
         extractedDetails :: [(PropertyDetails, Maybe String)]
         extractedDetails = if not (null projectChildTrees) then
@@ -95,7 +82,7 @@ processProjectChildren projectChildTree =
     processedProjectChildren
     where
         childrenTrees :: [TagTreePos String]
-        childrenTrees = select projectChildrenSelector (content projectChildTree)
+        childrenTrees = select (sel "div.child") (content projectChildTree)
 
         processedProjectChildren :: [(PropertyDetails, Maybe String)]
         processedProjectChildren = fmap processProjectChild childrenTrees
@@ -135,9 +122,9 @@ extractPropertyDetails :: TagTreePos String -> PropertyDetails
 extractPropertyDetails propertyTree =
     PropertyDetails {bedrooms = bedrooms, bathrooms = bathrooms, cars = cars}
     where
-        bedrooms = iconToValue $ select bedroomIconSelector (content propertyTree)
-        bathrooms = iconToValue $ select bathIconSelector (content propertyTree)
-        cars = iconToValue $ select carIconSelector (content propertyTree)
+        bedrooms = iconToValue $ select (sel ".rui-icon-bed") (content propertyTree)
+        bathrooms = iconToValue $ select (sel ".rui-icon-bath") (content propertyTree)
+        cars = iconToValue $ select (sel ".rui-icon-car") (content propertyTree)
 
 
 streetFromAddressTree :: TagTreePos String -> String
@@ -154,32 +141,9 @@ propertyFromListingTree listingTree =
         propertyFeatures :: [TagTreePos String]
         propertyFeatures = propertyFeaturesTree listingTree
 
-bedroomIconSelector :: Selector
-bedroomIconSelector = sel ".rui-icon-bed"
-
-bathIconSelector :: Selector
-bathIconSelector = sel ".rui-icon-bath"
-
-carIconSelector :: Selector
-carIconSelector = sel ".rui-icon-car"
-
-addressSelector :: Selector
-addressSelector = sel "a[rel=listingName]"
-
-listingSelector :: Selector
-listingSelector = sel "article.resultBody"
-
-listingInfoSelector :: Selector
-listingInfoSelector = sel "div.listingInfo"
-
-projectChildSelector :: Selector
-projectChildSelector = sel "div.project-child-listings"
-
-projectChildrenSelector :: Selector
-projectChildrenSelector = sel "div.child"
 
 listings :: TagTree String -> [TagTreePos String]
-listings = select listingSelector
+listings = select (sel "article.resultBody")
 
 propertyFeaturesSelector :: Selector
 propertyFeaturesSelector = sel "dl.rui-property-features"
@@ -189,14 +153,3 @@ propertyFeaturesTree listingTree = select propertyFeaturesSelector (content list
 
 hasListings :: TagTree String -> Bool
 hasListings tree = not (null (select (sel "article.resultBody") tree))
-
-listingInfoToPropertyFeatures :: [Tag String] -> [[Tag String]]
-listingInfoToPropertyFeatures tags = tail $ splitWhen propertyFeatures tags
-
-propertyFeatures :: Tag String -> Bool
-propertyFeatures tag = tag ~== TagOpen "dl" []
-    && fromAttrib "class" tag =~ "rui-property-features"
-
-listingInfo :: Tag String -> Bool
-listingInfo tag = tag ~== TagOpen "article" []
-    && fromAttrib "class" tag =~ "resultBody"
