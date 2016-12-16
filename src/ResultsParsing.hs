@@ -17,7 +17,7 @@ data PropertyDetails = PropertyDetails  { bedrooms :: Maybe String
 
 data Property = Property        { details :: PropertyDetails
                                 , location :: String
-                                , price :: Int
+                                , price :: Maybe String
                                 } deriving (Show)
 
 parsePage :: String -> String
@@ -26,7 +26,8 @@ parsePage content =
 --    show $ (tagTree !! 9)
     --show $ fmap (\trees -> fmap (\features -> length features) trees) propertyFeaturesTrees
 --      show $ fmap (\addresses -> addresses) maybeAddresses
-      show  maybeDetails
+      --show  maybeDetails
+      show maybeProperties
 --    show maybeBodyTree
 --    show ""
     where
@@ -36,10 +37,25 @@ parsePage content =
         maybeListingTrees = fmap listings maybeBodyTree
         maybeAddresses = fmap (fmap addressFromListingTree) maybeListingTrees
         maybeDetails = fmap (fmap detailsFromListingTree) maybeListingTrees
+        maybeProperties = fmap (fmap parseListing) maybeListingTrees
         propertyFeaturesTrees = fmap (fmap propertyFeaturesTree) maybeListingTrees
         listingSections = tail $ splitWhen listingInfo tags
         propertyFeaturesList = fmap listingInfoToPropertyFeatures listingSections
 
+
+parseListing :: TagTreePos String -> [Property]
+parseListing listingTree =
+    fmap (`combineData` address) details
+    where
+        address :: String
+        address = addressFromListingTree listingTree
+
+        details :: [(PropertyDetails, Maybe String)]
+        details = detailsFromListingTree listingTree
+
+        combineData :: (PropertyDetails, Maybe String) -> String -> Property
+        combineData (propertyDetails, maybePrice) address =
+            Property {details = propertyDetails, price = maybePrice, location = address}
 
 addressFromListingTree :: TagTreePos String -> String
 addressFromListingTree listingTree =
@@ -51,22 +67,22 @@ addressFromListingTree listingTree =
         streetAddresses :: [String]
         streetAddresses = fmap streetFromAddressTree addressTrees
 
-detailsFromListingTree :: TagTreePos String -> String
+detailsFromListingTree :: TagTreePos String -> [(PropertyDetails, Maybe String)]
 detailsFromListingTree listingTree =
-    show  extractedDetails
+    extractedDetails
     where
         projectChildTrees :: [TagTreePos String]
         projectChildTrees = select projectChildSelector (content listingTree)
 
-        extractedDetails :: [String]
+        extractedDetails :: [(PropertyDetails, Maybe String)]
         extractedDetails = if not (null projectChildTrees) then
-                [processProjectChildren $ head projectChildTrees]
+                processProjectChildren $ head projectChildTrees
             else
                 [processSingleProperty listingTree]
 
-processSingleProperty :: TagTreePos String -> String
+processSingleProperty :: TagTreePos String -> (PropertyDetails, Maybe String)
 processSingleProperty propertyTree =
-    show propertyDetails ++ show propertyPrice
+    (propertyDetails, propertyPrice)
     where
         propertyDetails :: PropertyDetails
         propertyDetails = extractPropertyDetails propertyTree
@@ -74,16 +90,25 @@ processSingleProperty propertyTree =
         propertyPrice :: Maybe String
         propertyPrice = extractSinglePropertyPrice propertyTree
 
-processProjectChildren :: TagTreePos String -> String
+processProjectChildren :: TagTreePos String -> [(PropertyDetails, Maybe String)]
 processProjectChildren projectChildTree =
-    show $ concat processedProjectChildren
+    processedProjectChildren
     where
         childrenTrees :: [TagTreePos String]
         childrenTrees = select projectChildrenSelector (content projectChildTree)
 
-        processedProjectChildren :: [String]
-        processedProjectChildren = fmap (\childTree -> show (extractPropertyDetails childTree)
-            ++ show (extractProjectChildPrice childTree)) childrenTrees
+        processedProjectChildren :: [(PropertyDetails, Maybe String)]
+        processedProjectChildren = fmap processProjectChild childrenTrees
+
+processProjectChild :: TagTreePos String -> (PropertyDetails, Maybe String)
+processProjectChild projectChild =
+    (propertyDetails, propertyPrice)
+    where
+        propertyDetails :: PropertyDetails
+        propertyDetails = extractPropertyDetails projectChild
+
+        propertyPrice :: Maybe String
+        propertyPrice = extractProjectChildPrice projectChild
 
 extractPrice :: String -> TagTreePos String -> Maybe String
 extractPrice selector tree =
