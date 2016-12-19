@@ -17,8 +17,6 @@ import Data.List.Split
 
 import System.Directory
 
-import ResultsParsing
-
 data PageResult = PageResult    { page :: String
                                 , content :: String
                                 , propertyLinks :: [String]
@@ -32,14 +30,14 @@ openURL :: String -> IO String
 openURL x = getResponseBody =<< simpleHTTP (getRequest x)
 
 timestamp :: IO String -- :: (year,month,day)
-timestamp = getCurrentTime >>= return . dateAsString . toGregorian . utctDay
+timestamp = fmap (dateAsString . toGregorian . utctDay) getCurrentTime
 
 dateAsString :: (Integer, Int, Int) -> String
-dateAsString (year, month, day) = (show year) ++ "-" ++ (show month) ++ "-" ++ (show day)
+dateAsString (year, month, day) = show year ++ "-" ++ show month ++ "-" ++ show day
 
 resultToPrintable :: PageResult -> String
 resultToPrintable pageResult =
-    show (page pageResult) ++ " " ++ (show $ nextPage pageResult)
+    show (page pageResult) ++ " " ++ show (nextPage pageResult)
 
 singlePage :: IO PageResult
 singlePage = propertyUrlsFromLink "/buy/between-200000-500000-in-richmond%2c+vic+3121/list-3"
@@ -47,14 +45,14 @@ singlePage = propertyUrlsFromLink "/buy/between-200000-500000-in-richmond%2c+vic
 reaResults :: IO [PageResult]
 reaResults = do
         result <- propertyUrlsFromLink "/buy/between-200000-500000-in-richmond%2c+vic+3121%3b/list-1"
-        (allPropertyUrls [result] result)
+        allPropertyUrls [result] result
 
 allPropertyUrls :: [PageResult] -> PageResult -> IO [PageResult]
-allPropertyUrls prevResults pageResult = case (nextPage pageResult) of
+allPropertyUrls prevResults pageResult = case nextPage pageResult of
     Just nextPage -> do
-        pageResult <- propertyUrlsFromLink (nextPage)
+        pageResult <- propertyUrlsFromLink nextPage
         allPropertyUrls (prevResults ++ [pageResult]) pageResult
-    otherwise -> return (prevResults ++ [pageResult])
+    _ -> return (prevResults ++ [pageResult])
 
 propertyUrlsFromLink :: String -> IO PageResult
 propertyUrlsFromLink link = do
@@ -63,17 +61,17 @@ propertyUrlsFromLink link = do
     let propertyLinks = propertyUrls (parseTags responseBody)
     let nextPage = nextPageUrl (parseTags responseBody)
     _ <- print link
-    return $ PageResult { page=link
+    return PageResult { page=link
                         , content=responseBody
                         , propertyLinks=propertyLinks
                         , nextPage=nextPage
                         }
 
 propertyUrls :: [Tag String] -> [String]
-propertyUrls tags = fmap extractUrl $ filter propertyLink tags
+propertyUrls tags = extractUrl <$> filter propertyLink tags
     where
         extractUrl :: Tag String -> String
-        extractUrl tag = fromAttrib "href" tag
+        extractUrl = fromAttrib "href"
 
 propertyLink :: Tag String -> Bool
 propertyLink tag = tag ~== TagOpen "a" []
@@ -94,40 +92,27 @@ writePageResult resultsFolder pageResult =
     where
         fileName = last $ splitOn "/" (page pageResult)
 
-fetchResults :: IO ()
-fetchResults = do
-    t <- timestamp
+fetchResults :: String -> IO ()
+fetchResults folderName= do
     homeDirectory <- getHomeDirectory
-    resultsFolder <- return (homeDirectory ++ "/reaResults/" ++ t)
+    let resultsFolder = homeDirectory ++ "/reaResults/" ++ folderName
     _ <- createDirectoryIfMissing True resultsFolder
     pageResults <- reaResults
-    _ <- mapM (\pageResult -> writePageResult resultsFolder pageResult) pageResults
+    _ <- mapM (writePageResult resultsFolder) pageResults
     return ()
 
 listFiles :: String -> IO [FilePath]
 listFiles t = do
     homeDirectory <- getHomeDirectory
-    resultsFolder <- return (homeDirectory ++ "/reaResults/" ++ t)
+    let resultsFolder = homeDirectory ++ "/reaResults/" ++ t
     files <- listDirectory resultsFolder
-    absolutePaths <- return $ fmap (\file -> resultsFolder ++ "/" ++ file) files
-    return absolutePaths
-
-fileToProperties :: FilePath -> IO (Maybe [Property])
-fileToProperties path = do
-    handle <- openFile path ReadMode
-    contents <- hGetContents handle
-    parsedProperties <- return $ parsePage contents
-    _ <- print $ length parsedProperties
-    hClose handle
-    return parsedProperties
+    return $ fmap (\file -> resultsFolder ++ "/" ++ file) files
 
 main :: IO ()
 main = do
-    allFiles <- listFiles "2016-11-29"
-    allProperties <- mapM fileToProperties allFiles
-    --handle <- openFile "/Users/leonti.bielski/reaResults/2016-11-29/list-1" ReadMode
-    --contents <- hGetContents handle
-    --print $ parsePage contents
-    --hClose handle
-    print allProperties
---    print "Call fetchResults to write into files"
+    _ <- print "Fetching pages ..."
+    t <- timestamp
+    _ <- fetchResults t
+    files <- listFiles t
+    _ <- mapM print files
+    print "Done"
