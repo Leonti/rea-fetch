@@ -10,3 +10,5 @@ for i in */; do
 done
 
 ls /root/reaResults
+
+aws s3 cp /root/reaResults s3://leonti-rea-crawler/ --recursive
