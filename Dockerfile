@@ -11,7 +11,7 @@ ENTRYPOINT ["/bin/bash", "-c"]
 
 CMD ["/root/fetch.sh"]
 
-#sudo docker run \
+#sudo docker run -v /root/reaResults:/root/reaResults \
 #--env AWS_ACCESS_KEY_ID=<access_key_id> \
 #--env AWS_SECRET_ACCESS_KEY=<secret_access_key> \
 #--env AWS_DEFAULT_REGION=us-east-1 leonti/rea-fetch
