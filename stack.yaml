@@ -11,6 +11,11 @@ packages:
 extra-deps:
 - tagsoup-selection-0.1.0.1
 - tagsoup-0.13.10
+- strptime-1.0.10
+- safe-0.3.14
+- http-client-tls-0.3.4
+- http-client-0.5.6.1
+- http-conduit-2.2.3.1
 
 
 # Override default flag values for local packages and extra-deps
