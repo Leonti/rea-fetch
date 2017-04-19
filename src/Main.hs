@@ -140,7 +140,7 @@ listFiles t = do
 soldProperties :: IO ()
 soldProperties = do
     homeDirectory <- getHomeDirectory
-    contents <- readFile $ homeDirectory ++ "/Downloads/sold.html"
+    contents <- readFile $ homeDirectory ++ "/Downloads/sold.htm"
     let dates = findDates contents
     let nextPageLink = findNextPageLink contents
     _ <- print dates

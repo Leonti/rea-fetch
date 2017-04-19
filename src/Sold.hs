@@ -14,6 +14,7 @@ import Data.String.Utils
 import Data.Time.Parse
 import Data.Time.LocalTime
 import Safe
+import Debug.Trace
 
 data SoldPage = SoldPage
                         { page :: String
@@ -36,9 +37,10 @@ findDates pageContent =
         Just bodyTree -> fmap (fromJust . toDate) dateTags
             where
                 dateTags :: [TagTreePos String]
-                dateTags = select (sel ".property-card__sold-date") bodyTree
+                dateTags = select (sel ".property-card__with-comma") bodyTree
         Nothing -> []
     where
+        pageTagTree :: [TagTree String]
         pageTagTree = parseTree pageContent
         maybeBodyTree = find isBody pageTagTree
 
@@ -66,9 +68,10 @@ extractUrl (TagLeaf _) = Nothing
 toDate :: TagTreePos String -> Maybe LocalTime
 toDate tree = fmap fst maybeParsedDate
     where
-        unparsedDate = innerText $ flattenTree [TagTreeZipper.content tree]
-        dateAsString = replace ", Sold on " "" unparsedDate
+        flattenedTree = flattenTree [TagTreeZipper.content tree]
+        unparsedFullDate = innerText flattenedTree
+        dateAsString = replace "Sold on " "" unparsedFullDate
         maybeParsedDate = strptime "%d %b %Y" dateAsString
 
 isBody :: TagTree String -> Bool
-isBody tree = not (null (select (sel ".property-card__info") tree))
+isBody tree = not (null (select (sel ".property-card__with-comma") tree))
