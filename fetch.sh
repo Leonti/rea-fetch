@@ -10,11 +10,21 @@ for i in */; do
     rm -rf "$i"
 done
 
+cd /root/reaSoldResults
+soldPages=$(ls -R /root/reaSoldResults)
+
+for i in */; do
+    zip -r "${i%/}-sold.zip" "$i";
+    rm -rf "$i"
+done
+
 #ls -R /root/reaResults
 
 aws s3 cp /root/reaResults s3://leonti-rea-crawler/ --recursive
+aws s3 cp /root/reaSoldResults s3://leonti-rea-crawler/ --recursive
 
-content=$'New pages have been fetched from REA website:\n\n'$pages
+soldPagesText=$'\nSold properties:\n\n'$soldPages
+content=$'New pages have been fetched from REA website:\n\n'$pages$soldPagesText
 
 subject="REA Fetch results "$(date +"%Y.%m.%d")
 

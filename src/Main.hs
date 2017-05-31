@@ -23,14 +23,23 @@ import Data.Time.Parse
 import OnSale
 import Sold
 
+import qualified Data.ByteString.Lazy.Char8 as LB
+
 baseUrl = "https://www.realestate.com.au"
 pageDelay = 1000000
 soldPropertiesBaseUrl = "/sold/with-1-bedroom-in-melbourne+city+-+greater+region%2c+vic/list-1?numParkingSpaces=1&maxBeds=1&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
 
 openURL :: String -> IO String
 openURL x = do
-    result <- Network.HTTP.Conduit.simpleHttp x
+    manager <- newManager tlsManagerSettings
+    result <- openURLWithTimeout manager x 45000000
     return (BS.unpack result)
+
+openURLWithTimeout :: Manager -> String -> Int -> IO LB.ByteString
+openURLWithTimeout manager url timeout = do
+    req <- parseRequest url
+    let req' = req {responseTimeout = responseTimeoutMicro 45000000}
+    responseBody <$> httpLbs req' manager
 
 timestamp :: IO String -- :: (year,month,day)
 timestamp = fmap (dateAsString . toGregorian . utctDay) getCurrentTime
