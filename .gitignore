@@ -1,2 +1,9 @@
 .stack-work/
 .DS_Store
+
+profile
+rea-fetch.aux
+rea-fetch.prof
+rea-fetch.hp
+rea-fetch.ps
+rea-fetch-no-streaming.ps

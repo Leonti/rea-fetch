@@ -23,11 +23,15 @@ import Data.Time.Parse
 import OnSale
 import Sold
 
+import Streaming
+import qualified Streaming.Prelude as S
+
 import qualified Data.ByteString.Lazy.Char8 as LB
 
 baseUrl = "https://www.realestate.com.au"
 pageDelay = 1000000
 soldPropertiesBaseUrl = "/sold/with-1-bedroom-in-melbourne+city+-+greater+region%2c+vic/list-1?numParkingSpaces=1&maxBeds=1&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+onSalePropertiesBaseUrl = "/buy/between-200000-500000-in-richmond%2c+vic+3121%3b/list-1"
 
 openURL :: String -> IO String
 openURL x = do
@@ -54,36 +58,34 @@ resultToPrintable pageResult =
 singlePage :: IO PageResult
 singlePage = propertyPageFromLink "/buy/between-200000-500000-in-richmond%2c+vic+3121/list-3"
 
-reaResults :: IO [PageResult]
-reaResults = do
-        result <- propertyPageFromLink "/buy/between-200000-500000-in-richmond%2c+vic+3121%3b/list-1"
-        allPropertyUrls [] result
-
 singleSoldPage :: IO SoldPage
 singleSoldPage = soldPageFromLink soldPropertiesBaseUrl
 
-soldResults :: LocalTime -> IO [SoldPage]
-soldResults cutOffTime = do
-    result <- soldPageFromLink soldPropertiesBaseUrl
-    allSoldPropertyUrls [] cutOffTime result
+resultsAsStream :: Stream (Of PageResult) IO ()
+resultsAsStream = S.unfoldr nextResult (Just onSalePropertiesBaseUrl)
 
-allPropertyUrls :: [PageResult] -> PageResult -> IO [PageResult]
-allPropertyUrls prevResults currentPageResult = case OnSale.nextPage currentPageResult of
+nextResult :: Maybe String -> IO (Either () (PageResult, Maybe String))
+nextResult maybeNextLink = case maybeNextLink of
     Just nextPage -> do
         pageResult <- propertyPageFromLink nextPage
-        allPropertyUrls (prevResults ++ [currentPageResult]) pageResult
-    _ -> return (prevResults ++ [currentPageResult])
+        return (Right (pageResult, OnSale.nextPage pageResult))
+    _ -> return (Left ())
 
-allSoldPropertyUrls :: [SoldPage] -> LocalTime -> SoldPage -> IO [SoldPage]
-allSoldPropertyUrls prevResults cutOffDate currentSoldPage =
-    case Sold.nextPage currentSoldPage of
-        Just nextPage -> if minimum (Sold.dates currentSoldPage) < cutOffDate then
-                return (prevResults ++ [currentSoldPage])
-             else
-                 do
-                     soldPageResult <- soldPageFromLink nextPage
-                     allSoldPropertyUrls (prevResults ++ [currentSoldPage]) cutOffDate soldPageResult
-        _ -> return (prevResults ++ [currentSoldPage])
+soldResultsAsStream :: LocalTime -> Stream (Of SoldPage) IO ()
+soldResultsAsStream cutOffTime = S.unfoldr (nextSoldResult cutOffTime) (Just soldPropertiesBaseUrl)
+
+nextSoldResult :: LocalTime -> Maybe String -> IO (Either () (SoldPage, Maybe String))
+nextSoldResult cutOffTime maybeNextLink =
+    case maybeNextLink of
+        Just nextPage ->
+            do
+                soldPageResult <- soldPageFromLink nextPage
+                return (
+                    if minimum (Sold.dates soldPageResult) < cutOffTime then
+                        Left ()
+                    else
+                        Right (soldPageResult, Sold.nextPage soldPageResult))
+        _ -> return (Left ())
 
 propertyPageFromLink :: String -> IO PageResult
 propertyPageFromLink link = do
@@ -119,8 +121,8 @@ fetchResults folderName = do
     homeDirectory <- getHomeDirectory
     let resultsFolder = homeDirectory ++ "/reaResults/" ++ folderName
     _ <- createDirectoryIfMissing True resultsFolder
-    pageResults <- reaResults
-    _ <- mapM (writePageResult resultsFolder) pageResults
+    let pageResults = resultsAsStream
+    S.mapM_ (writePageResult resultsFolder) pageResults
     return ()
 
 fetchSoldResults :: String -> LocalTime -> IO ()
@@ -128,8 +130,8 @@ fetchSoldResults folderName cutOffDate = do
     homeDirectory <- getHomeDirectory
     let resultsFolder = homeDirectory ++ "/reaSoldResults/" ++ folderName
     _ <- createDirectoryIfMissing True resultsFolder
-    pageResults <- soldResults cutOffDate
-    _ <- mapM (writeSoldResult resultsFolder) pageResults
+    let pageResults = soldResultsAsStream cutOffDate
+    S.mapM_ (writeSoldResult resultsFolder) pageResults
     return ()
 
 readLastTimestamp :: IO LocalTime
