@@ -37,7 +37,7 @@ findDates pageContent =
         Just bodyTree -> fmap (fromJust . toDate) dateTags
             where
                 dateTags :: [TagTreePos String]
-                dateTags = select (sel ".property-card__with-comma") bodyTree
+                dateTags = select (sel ".residential-card__with-comma") bodyTree
         Nothing -> []
     where
         pageTagTree :: [TagTree String]
@@ -74,4 +74,4 @@ toDate tree = fmap fst maybeParsedDate
         maybeParsedDate = strptime "%d %b %Y" dateAsString
 
 isBody :: TagTree String -> Bool
-isBody tree = not (null (select (sel ".property-card__with-comma") tree))
+isBody tree = not (null (select (sel ".residential-card__with-comma") tree))
