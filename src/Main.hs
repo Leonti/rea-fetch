@@ -1,36 +1,49 @@
 module Main where
 
-import Data.Char
-import Network.HTTP.Conduit
+import           Data.Char
+import           Network.HTTP.Conduit
 --import qualified Data.ByteString.Lazy as LB
+import           Control.Concurrent
 import qualified Data.ByteString.Lazy.Char8 as BS
-import Data.Maybe
-import Control.Concurrent
+import           Data.Maybe
 
-import System.IO
-import Control.Monad
+import           Control.Monad
+import           System.IO
 
-import Data.Time.Clock
-import Data.Time.Calendar
+import           Data.Time.Calendar
+import           Data.Time.Clock
 
-import Data.List.Split
+import           Data.List.Split
 
-import System.Directory
-import System.Environment
+import           System.Directory
+import           System.Environment
 
-import Data.Time.LocalTime
-import Data.Time.Parse
-import OnSale
-import Sold
+import           Data.Time.LocalTime
+import           Data.Time.Parse
+import           OnSale
+import           Sold
 
-import Streaming
-import qualified Streaming.Prelude as S
+import           Streaming
+import qualified Streaming.Prelude          as S
 
 import qualified Data.ByteString.Lazy.Char8 as LB
+import           System.Random              (randomIO)
 
 baseUrl = "https://www.realestate.com.au"
 pageDelay = 1000000
-soldPropertiesBaseUrl = "/sold/with-1-bedroom-in-melbourne+city+-+greater+region%2c+vic/list-1?numParkingSpaces=1&maxBeds=1&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+soldPropertiesBaseUrls =
+  [ "/sold/property-unit+apartment-between-0-600000-in-melbourne%2c+vic+3000/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-melbourne%2c+vic+3004/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-richmond%2c+vic+3121/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-abbotsford%2c+vic+3067/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-hawthorn%2c+vic+3122/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-east+melbourne%2c+vic+3002/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-fitzroy%2c+vic+3065/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-collingwood%2c+vic+3066/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-carlton%2c+vic+3053/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-south+yarra%2c+vic+3141/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  , "/sold/property-unit+apartment-between-0-600000-in-south+melbourne%2c+vic+3205/list-1?includeSurrounding=false&misc=ex-no-sale-price&activeSort=solddate&source=refinement"
+  ]
 onSalePropertiesBaseUrl = "/buy/between-200000-500000-in-richmond%2c+vic+3121%3b/list-1"
 
 openURL :: String -> IO String
@@ -59,7 +72,7 @@ singlePage :: IO PageResult
 singlePage = propertyPageFromLink "/buy/between-200000-500000-in-richmond%2c+vic+3121/list-3"
 
 singleSoldPage :: IO SoldPage
-singleSoldPage = soldPageFromLink soldPropertiesBaseUrl
+singleSoldPage = soldPageFromLink $ head soldPropertiesBaseUrls
 
 resultsAsStream :: Stream (Of PageResult) IO ()
 resultsAsStream = S.unfoldr nextResult (Just onSalePropertiesBaseUrl)
@@ -71,8 +84,8 @@ nextResult maybeNextLink = case maybeNextLink of
         return (Right (pageResult, OnSale.nextPage pageResult))
     _ -> return (Left ())
 
-soldResultsAsStream :: LocalTime -> Stream (Of SoldPage) IO ()
-soldResultsAsStream cutOffTime = S.unfoldr (nextSoldResult cutOffTime) (Just soldPropertiesBaseUrl)
+soldResultsAsStream :: LocalTime -> String -> Stream (Of SoldPage) IO ()
+soldResultsAsStream cutOffTime initialUrl = S.unfoldr (nextSoldResult cutOffTime) (Just initialUrl)
 
 nextSoldResult :: LocalTime -> Maybe String -> IO (Either () (SoldPage, Maybe String))
 nextSoldResult cutOffTime maybeNextLink =
@@ -110,11 +123,12 @@ writePageResult resultsFolder pageResult =
         fileName = last $ splitOn "/" (OnSale.page pageResult)
 
 writeSoldResult :: FilePath -> SoldPage -> IO ()
-writeSoldResult resultsFolder pageResult =
-    writeFile (resultsFolder ++ "/" ++ fileName) (Sold.content pageResult)
+writeSoldResult resultsFolder pageResult = do
+    randomNumber <- randomIO :: IO Int
+    writeFile (resultsFolder ++ "/" ++ (fileName randomNumber)) (Sold.content pageResult)
     where
         nameWithQuery = last $ splitOn "/" (Sold.page pageResult)
-        fileName = head $ splitOn "?" nameWithQuery
+        fileName randomNumber = (head $ splitOn "?" nameWithQuery) ++ (show randomNumber)
 
 fetchResults :: String -> IO ()
 fetchResults folderName = do
@@ -130,8 +144,8 @@ fetchSoldResults folderName cutOffDate = do
     homeDirectory <- getHomeDirectory
     let resultsFolder = homeDirectory ++ "/reaSoldResults/" ++ folderName
     _ <- createDirectoryIfMissing True resultsFolder
-    let pageResults = soldResultsAsStream cutOffDate
-    S.mapM_ (writeSoldResult resultsFolder) pageResults
+    let pageResults = fmap (soldResultsAsStream cutOffDate) soldPropertiesBaseUrls
+    mapM (S.mapM_ (writeSoldResult resultsFolder)) pageResults
     return ()
 
 readLastTimestamp :: IO LocalTime
