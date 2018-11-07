@@ -43,4 +43,4 @@ nextPageUrl tags = case filter nextPageLink tags of
 
 nextPageLink :: Tag String -> Bool
 nextPageLink tag = tag ~== TagOpen "a" []
-    && fromAttrib "title" tag == "View the next page of results"
+    && fromAttrib "title" tag == "Go to Next Page"
